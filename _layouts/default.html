@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>{{ page.title }}</title>
+
+        <!-- Syntax highlighting CSS -->
+        <link rel="stylesheet" href="{{ site.baseurl }}/css/syntax.css" />
+
+        <!-- Custom CSS -->
+        <link rel="stylesheet" href="{{ site.baseurl }}/css/hyde.css">
+        <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=Open+Sans:300,400italic,400,600,700|Abril+Fatface">
+    </head>
+    <body>
+        <header class="masthead">
+            <div class="masthead-inner">
+                <h1>{{ site.title }}</h1>
+                <p class="lead">{{ site.description }}</p>
+
+                <div class="colophon">
+                    <ul class="colophon-links">
+                        <li>
+                            <a href="https://github.com/phune-gaming/pg-server-rules">GitHub project</a>
+                        </li>
+                    </ul>
+                    <p>This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/deed.en_US">Creative Commons Attribution 4.0 International License</a>.</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="content container">
+            {{ content }}
+        </div>
+    </body>
+</html>
