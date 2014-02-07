@@ -230,26 +230,17 @@ when
 
 ### Generate a move for the bot
 
-If bots are supported by a game, their moves must be generated and applied to the game state.
+If bots are supported by a game, their moves must be generated.
 
 #### JavaScript
 
-The `createAndExecuteBotMove` function will be called to generate a move. It must return the same result as `evaluateMove` plus a `content` attribute containing the move details.
-
-| TODO | It doesn't make sense to pass the same object twice for the move object |
+The `createAndExecuteBotMove` function will be called to generate a valid move. It must return a string containing the move details. It is not necessary to apply the move to the game state because the `evaluateMove` function will be called automatically using the generated move.
 
 ```js
-var createAndExecuteBotMove = function(state, playerId, moveId, content) {
-    // generates a new move and apply the changes to the game state
-    var move = evaluateMove(state, playerId, moveId, {
+var createAndExecuteBotMove = function(state, playerId) {
+    return JSON.stringify({
         pos: 0 // any move details can be passed here
     });
-
-    move.content = {
-        pos: 0 // any move details can be passed here
-    };
-
-    return move;
 };
 ```
 
