@@ -234,20 +234,23 @@ If bots are supported by a game, their moves must be generated.
 
 #### JavaScript
 
-The `createAndExecuteBotMove` function will be called to generate a valid move. It must return a string containing the move details. It is not necessary to apply the move to the game state because the `evaluateMove` function will be called automatically using the generated move.
+The `createBotMove` function will be called to generate a valid move for the bot. It returns an object containing the content of the move and the state of the game as strings. The `evaluateMove` function will be called automatically with the generated bot move, as such, unlike the Java implementation, this move does not need to be applied to the game state.
 
 ```js
-var createAndExecuteBotMove = function(state, playerId) {
-    return JSON.stringify({
-        pos: 0 // any move details can be passed here
-    });
+var createBotMove = function(state, playerId) {
+    return {
+        state: JSON.stringify(state),
+        content: JSON.stringify({
+            pos: 0 // any move details can be passed here
+        })
+    };
 };
 ```
 
 #### Java
 
 In Java this is achieved by implementing the interface `JavaRulesBot`.
-This interface only defines one method named `createAndExecuteBotMove`. It receives a pre-filled move with some info like the move id and the bot id and must return an instantiated `EvaluationResult`.
+This interface only defines one method named `createAndExecuteBotMove`. It receives a pre-filled move with some info like the move id and the bot id and must return an instantiated `EvaluationResult`. Since the `evaluateMove` function is not automatically called, the generated move must be added programmatically to the game state.
 
 ```java
 @Override
