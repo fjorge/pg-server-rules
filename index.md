@@ -5,33 +5,32 @@ title: Phune Gaming server-side rules
 
 # Phune Gaming server-side rules
 
-Phune Gaming requires games to have a server-side component (aka server-side rules) that manages the game state changes and validates the moves. This component must provide the following functionalities:
+Phune Gaming requires the games to have a server-side component (aka server-side rules) which manages the game state changes and validates the moves. This component must provide the following functionality:
 
-* Create the initial game state for a new match
+* Create the initial game state
 * Evaluate moves
-* Generate moves for the bot <sup>optional</sup>
-* Evaluate game specific messages
-* Retrieve information from the state
+* Generate bots move <sup>optional</sup>
+* Evaluate game-specific messages <sup>optional</sup>
+* Get info about the ongoing match
 
-And can be built using either JavaScript, Java or Drools, which must implement the interface specified for each one:
+The server-side rules can be written in JavaScript, Java or Drools, and must implement the interface specified for the particular (programming) language:
 
-| TODO | Fix URLs bellow |
-
-* [JavaScript](http://example.com)
-* [Java](http://example.com)
-* [Drools](http://example.com)
+* JavaScript: [JavaScriptRules](code/JavaScriptRules.html)
+* Java: [JavaGameRules](code/JavaGameRules.html), [JavaRulesBot](code/JavaRulesBot.html)
+* Drools: [DroolsRules](code/DroolsRules.html)
 
 ## SPI documentation
 
-| TODO | Explain why we consider it a SPI and its main goal |
+> Service Provider Interface (SPI) is an API intended to be implemented or extended by a third party. It can be used to enable framework extension and replaceable components.  
+> -- *http://en.wikipedia.org/wiki/Service_provider_interface*
 
-### Create the game state
+### Create the initial game state
 
-When a new match is created, a representation of the game initial state must be defined. It must contain all the information that needs to be stored for that specific match.
+When a new match is created, a representation of the game initial state must be defined. It must contain all the information that needs to be stored for that concrete match.
 
 #### JavaScript
 
-The `createStateForNewMatch` function will be called to return the game state as a string. It should contain the players information, the id of the next player to play, the id of the next move and any other information relevant to the game. The players attribute is an array containing the players information, each one is an array containing the player id in the first position and a boolean indicating if the player is a bot or not in the second position.
+The `createStateForNewMatch` function will be called to return the game state as a string. It should contain the players information, the id of the next player to play, the id of the next move and any other information relevant to the game. The players parameter is an array, which contains information about the players. Each element in the players array is an array for a single player, such as the first position holds the player's id and the second position holds a boolean value indicating whether the player is a bot or not.
 
 ```js
 var createStateForNewMatch = function(players, nextPlayerId) {
@@ -45,8 +44,8 @@ var createStateForNewMatch = function(players, nextPlayerId) {
 
 #### Java
 
-The `createStateForNewMatch` is the method responsible by initializing and returning a new game state that will be used through a match that is about to start.
-This method receives a list of ids that represents the players identifiers that will be participating in the match and that most often needs to be saved on the match state for later usage by the rules implementation.
+The `createStateForNewMatch` is the method responsible for initializing and returning a new game state, which will be used in the match that is about to start.
+This method receives a list of ids of the players who will take part in the match and that most often needs to be saved on the match state for later usage by the server-side rules implementation.
 
 ```java
 @Override
@@ -57,7 +56,7 @@ public void createStateForNewMatch(List<Long> players) {
 }
 ```
 
-The game state is game specific and you may design it in the way that best fits your game. As an example the game state may look like the following:
+The game state is game-specific and you may design it in the way that best fits your game. As an example the game state may look like the following:
 
 ```java
 public final class GameState {
@@ -71,7 +70,7 @@ public final class GameState {
 }
 ```
 
-One important aspect to keep in mind about game states is that they are persisted in the server as strings. This means that you will need to convert your game state from/to a string every time the server invokes the methods `getState` and `restoreState`. However you can delegate this work to the provided SPI by extending your rules implementation from the abstract class `JavaGameRulesBase<T>`, where `<T>` is the class type of your game state, e.g:
+One important aspect to keep in mind about the game states is that they are persisted on the server as strings. This means that you will need to convert your game state from/to a string every time the server invokes the methods `getState` and `restoreState`. However you can delegate this work to the provided SPI by extending your server-side rules implementation from the abstract class `JavaGameRulesBase<T>`, where `<T>` is the class type of your game state, e.g:
 
 ```java
 public class GameRules extends JavaGameRulesBase<BoardGameState> {
@@ -95,15 +94,13 @@ rule "match setup"
         $m.setStatus(Status.PLAYING);
         update($m);
         // setup other rules
-        [other facts related to the game]       
+        [other facts related to the game]
 end
 ```
 
 ### Evaluate moves
 
-Every time a client sends a move, it must be validated and the necessary changes should be applied to the game state.
-
-| TODO | Explain that moves are automatically validated by the server |
+Every time a client sends a move, the move must be validated and the necessary changes should be applied to the game state.
 
 #### JavaScript
 
@@ -123,16 +120,18 @@ var evaluateMove = function(state, playerId, moveId, content) {
 };
 ```
 
+**Note:** The parameters `playerId` and `moveId` are automatically validated by the server before calling this function.
+
 #### Java
 
-The method responsible for evaluating and executing (if applicable) a move sent by a client is named `evaluateMove`. It receives a `Move` entity and must return a `EvaluationResult` object instantiated with info based on the move evaluation result.
+The method responsible for evaluating and executing (if applicable) a move sent by a client is named `evaluateMove`. It receives a `Move` entity and must return an `EvaluationResult` object instantiated with info based on the result from the move evaluation.
 
 ```java
 @Override
 public EvaluationResult evaluateMove(Move move) {
     EvaluationResult result = new EvaluationResult();
 
-    // Evaluate the move and execute/update state it if valid ...
+    // Evaluate the move and if valid update the state...
     result.setEvaluationContent("Some result that the client understands");
     result.setEvaluationResultType(EvaluationResult.Type.SUCCESS);
 
@@ -140,7 +139,7 @@ public EvaluationResult evaluateMove(Move move) {
 }
 ```
 
-The received `Move` entity contains the id of the player that executed the move, the id of the move and the move representation. This representation is specific for each game, which means that just like with the game state, you're also free to design and use a move definition that best fits your game. As an example the move representation may look like the following:
+The received `Move` entity contains the id of the player who performed the move, the id of the move and the move representation. This representation is specific for each game, which means that just like with the game state, you are free to design and use a move definition that best fits your game. As an example the move representation may look like the following:
 
 ```java
 public class MoveContent {
@@ -152,7 +151,7 @@ public class MoveContent {
 } 
 ```
 
-This move is sent from the client as a string and you can interpret it as such or map it to your defined object and use it instead. You can achieve this by using the method `mapContentTo` offered by the class `Move`.
+The move is sent by the client as a string and you can interpret it as such or map it to the object defined by you and use it instead. This can be achieved by using the `mapContentTo` method available in the class `Move`.
 
 ```java
 MoveContent content = null;
@@ -173,7 +172,7 @@ int column = content.getPosX();
 
 #### Drools
 
-The moves are sent to the server in JSON format. To be interpreted by Drools they must be converted to an object defined inside Drools. For instance:
+The moves are sent to the server in JSON format. In order to be interpreted by Drools they must be converted to an object defined inside Drools. For instance:
 
 ```
 declare Move
@@ -182,9 +181,9 @@ declare Move
 end
 ```
 
-The class name, `Move` in this example, should always be sent by the clients in the `className` variable so Drools can instantiate the correct object. This approach removes the need to create and compile Java pojos for each move.
+The class name, `Move` in this example, should always be sent by the clients in the `className` variable so Drools can instantiate the correct object. This approach removes the need to create and compile Java POJOs for each move.
 
-Below are three rules representing a valid/invalid move and a move with a winner.
+The code snippet below demonstrates a possible implementation of the rules for: a valid move, an invalid move, and an ending move containing the winner info.
 
 ```
 rule "invalid move"
@@ -193,7 +192,7 @@ salience 10
     when
         $match : Match(status == Status.PLAYING);
         $pm : PlayerMoveDTO(evaluationResultType==null);
-        [other game related facts to fire this rule]
+        [other game-related facts to fire this rule]
     then
         // error
         $pm.setEvaluationResultType(EvaluationResultType.FAILED_VALIDATION);
@@ -207,7 +206,7 @@ rule "valid move"
 when
         $match : Match(status == Status.PLAYING);
         $pm : PlayerMoveDTO(evaluationResultType==null);
-        // other game related facts to fire this rule
+        // other game-related facts to fire this rule
     then
         modify($pm){
             setEvaluationResultType(EvaluationResultType.SUCCESS);
@@ -220,7 +219,7 @@ rule "winner move"
 when
         $match : Match(status == Status.PLAYING);
         $pm : PlayerMoveDTO(evaluationResultType==null);
-        // other game related facts to fire this rule
+        // other game-related facts to fire this rule
     then
         $pm.setWinnerPlayerId($playerId);
         $pm.setEvaluationContent("String of the result of winning");
@@ -228,7 +227,7 @@ when
      end
 ```
 
-### Generate a move for the bot
+### Generate bots move
 
 If bots are supported by a game, their moves must be generated.
 
@@ -258,7 +257,7 @@ public EvaluationResult createAndExecuteBotMove(Move prefilledMove) {
 
     EvaluationResult evaluationResult = new EvaluationResult();
 
-    // Generate a bot move based on game specific logic
+    // Generate a bot move based on game-specific logic
     // ...
 
     // Make sure that the generated content is placed inside the pre-filled move 
@@ -271,22 +270,22 @@ public EvaluationResult createAndExecuteBotMove(Move prefilledMove) {
 }
 ```
 
-**Note:** `prefilledMove.setContent` must be called passing the move representation created for the bot as an argument before the return statement.
+**Note:** `prefilledMove.setContent` must be called passing the move representation created for the bot as an argument.
 
 #### Drools
 
 _N/A_
 
-### Evaluate messages
+### Evaluate game-specific messages
 
 Games can send messages that are evaluated on the server and may change the game state.
-This type of messages may be used for games configuration.
+This type of messages may be used for game configuration.
 For instance, on a game like Battleship, the client can use these messages to ask the server to generate a new set of ships in random positions.
-The evaluation of these messages are very similar to the evaluation of moves except for the move validations already in its section.
+The evaluation of these messages is very similar to the evaluation of the moves except for the move validations already described in the section "Evaluate moves".
 
 #### JavaScript
 
-The `evaluateServerMessage` function will be called each time a message is sent by the game. It must return a object containing the message result and the new game state. It can also return `null` if it does not want a response to be sent to the game.
+The `evaluateServerMessage` function will be called each time a message is sent by the game. It must return an object containing the message result and the new game state. It can also return `null` if it does not want a response to be sent to the game.
 
 ```js
 function evaluateServerMessage(state, playerId, content) {
@@ -317,9 +316,9 @@ public EvaluationResult evaluateMessage(Message message) {
 
 _N/A_
 
-### Retrieve information from the state
+### Get info about the ongoing match
 
-As only this component can interpret the game state, it should provide the Phune Gaming platform with the information it requires (i.e. the id of the next player to play and the id of the next expected move).
+The game state kept on the game rules objects, should provide the Phune Gaming platform with the information it requires (i.e. the id of the next player to play and the id of the next expected move).
 
 #### JavaScript
 
@@ -372,8 +371,6 @@ end
 
 For a complete example, please find below the server-side rules needed for the implementation of the game Tic-Tac-Toe:
 
-| TODO | Fix URLs bellow |
-
-* [JavaScript](http://example.com)
-* [Java](http://example.com)
-* [Drools](http://example.com)
+* [JavaScript](code/tictactoe-rules.js)
+* [Java](code/tictactoe-rules-src.zip)
+* [Drools](code/tictactoe-rules.drl)
