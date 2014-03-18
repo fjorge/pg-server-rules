@@ -1,0 +1,325 @@
+package com.presenttechnologies.phunegaming.game.game_1
+
+import com.presenttechnologies.phunegaming.core.entities.Match;
+import com.presenttechnologies.phunegaming.core.entities.Match.Status;
+import com.presenttechnologies.phunegaming.core.entities.Player;
+import com.presenttechnologies.phunegaming.core.entities.dto.PlayerMoveDTO;
+import com.presenttechnologies.phunegaming.core.entities.dto.PlayerMoveDTO.EvaluationResultType;
+import com.presenttechnologies.phunegaming.core.entities.events.EventTypePK.Action;
+import com.presenttechnologies.phunegaming.core.entities.events.AccomplishmentEvent;
+import java.util.ArrayList;
+import java.lang.Math;
+
+
+// DECLARE
+//Used internally to indicate the starting player
+declare StartPlayer
+    playerId : long
+    matchId : long
+end
+
+// To transport moves
+declare Move
+    posX : int
+    posY : int
+end
+
+// used internally in the drools session
+declare TicTacMove extends Move 
+    playerId : long
+    moveId: long
+end
+
+// iterator help
+declare BoardPosition
+    x : int
+    y : int
+    diag : int
+    invDiag : int
+    playerScore : int
+    positionCode : int
+end
+
+// QUERIES
+query "findMatch"(long matchId)
+    $match : Match(id == matchId);
+end
+
+query "findLastPlayerMoveDTO"
+   $lastPlayerMoveDTO : PlayerMoveDTO($lowMoveId : moveId); 
+   not PlayerMoveDTO(moveId > $lowMoveId);
+end
+
+query "findNextPlayer"
+   Match($players : players);
+   PlayerMoveDTO($playerId : playerId, $lowMoveId : moveId); 
+   not PlayerMoveDTO(moveId > $lowMoveId);
+   $nextPlayer : Player(id!=$playerId) from $players; 
+end
+
+query "findStartPlayer"(long matchId)
+    $player : StartPlayer($playerId : playerId);
+end
+
+//######################################################################
+//###########################    RULES    ##############################
+//######################################################################
+rule "match setup"
+    when 
+        $m : Match(game.id == 1, status == Status.CREATED, lastMoveDate == null, $matchId : id);
+    then
+        $m.setStatus(Status.PLAYING);
+        //update the match to the state of playing
+        update($m);
+        //insert the starting player fact in working memory
+        insert(new StartPlayer( ($m.getPlayers().get(0).getId()), $matchId ) );
+end
+
+//###########################  VALIDATE  ##############################
+rule "Last player diferent from current"
+//execute first
+salience 10
+    when
+        $match : Match(status == Status.PLAYING);
+        // new move
+        $m : Move();
+        $pm : PlayerMoveDTO(evaluationResultType==null, $currentMoveId : moveId, $currentPlayerId : playerId);
+        //previuos move from same player
+        $lastPlayerMoveDTO : PlayerMoveDTO($lowMoveId : moveId, playerId==$currentPlayerId, this!=$pm);
+        not PlayerMoveDTO(moveId >  $lowMoveId, moveId != $currentMoveId );
+    then
+        // error
+        $pm.setEvaluationResultType(EvaluationResultType.FAILED_VALIDATION);
+        $pm.setEvaluationContent("NOT YOUR TURN");
+        //drop player move from working memory
+        retract($pm);
+        //drop move from working memory
+        retract($m);    
+end
+
+rule "Player move has valid position"
+    when
+        $match : Match(status == Status.PLAYING);
+        // new move
+        $pm : PlayerMoveDTO(evaluationResultType==null, $currentMoveId : moveId);
+        $m : Move(posX>=0, posX<=2, posY>=0 , posY<=2);
+        // empty position
+        not TicTacMove(posX==$m.getPosX(), posY==$m.getPosY());
+    then
+        // move ok
+        $pm.setEvaluationResultType(EvaluationResultType.SUCCESS);
+        update($pm);
+        // store move in the working memory
+        insert(new TicTacMove($m.getPosX(),$m.getPosY(), $pm.getPlayerId(), $pm.getMoveId()));
+        // data transport object not needed anymore
+        retract($m);
+        // processing will be made with the board position
+        insert(new BoardPosition(2,2,-1,-1,-1,-1));
+end
+
+rule "Player move already filled"
+    when
+        $match : Match(status == Status.PLAYING);
+        // new move
+        $pm : PlayerMoveDTO(evaluationResultType==null);
+        $m : Move();
+        // filled position
+        TicTacMove(posX==$m.getPosX(), posY==$m.getPosY());
+    then
+        // error
+        $pm.setEvaluationResultType(EvaluationResultType.FAILED_VALIDATION);
+        $pm.setEvaluationContent("POSITION ALREADY FILLED");
+        //drop player move from working memory
+        retract($pm);
+        //drop move from working memory
+        retract($m);
+end
+
+rule "Player move out of board"
+    when
+        $match : Match(status == Status.PLAYING);
+        // new move
+        $pm : PlayerMoveDTO(evaluationResultType==null);
+        $m : Move();
+        not Move(posX>=0, posX<=2, posY>=0 , posY<=2);
+        // filled position
+    then
+        // error
+        $pm.setEvaluationResultType(EvaluationResultType.FAILED_VALIDATION);
+        $pm.setEvaluationContent("POSITION OUT OF BOARD");
+        //drop player move from working memory
+        retract($pm);
+        //drop move from working memory
+        retract($m);
+end
+
+rule "Match already ended"
+    when
+        $match : Match(status == Status.ENDED);
+        // new move
+        $pm : PlayerMoveDTO(evaluationResultType==null);
+        $m : Move();
+    then
+        // error
+        $pm.setEvaluationResultType(EvaluationResultType.FAILED_VALIDATION);
+        $pm.setEvaluationContent("MATCH ENDED");
+        //drop player move from working memory
+        retract($pm);
+        //drop move from working memory
+        retract($m);
+end
+
+//########################### EVENTS ###############################
+//Create game related events to give achievments/badges
+rule "Central cell on start event"
+    when  
+        $match : Match(status == Status.PLAYING, $matchId : id, $gameId : game.id, $gameVersion : game.version);
+        // First move in the central cell.
+        $m : TicTacMove(posX==1, posY==1, moveId==1L);
+        // Get the right PlayerMoveDTO and triger only one time per game.
+        $pm : PlayerMoveDTO(evaluationResultType==EvaluationResultType.SUCCESS, events==null, moveId==1L);
+    then
+        System.out.println("cell on start event: "+$m);
+        $pm.addEvent(new AccomplishmentEvent(15, null, "{\"gameVersion\":\""+$gameVersion+"\"}", Action.ACCOMPLISHMENT_GAME_PRIVATE, null, $gameId,
+                $matchId, 10010L));
+        update($pm);
+end
+
+//###########################  EVALUATE(COUNT MOVES)  ##############################
+rule "Player count row"
+    when  
+        $match : Match(status == Status.PLAYING);
+        // new move, no winner, iterate y values
+        $b : BoardPosition(playerScore != 3 , y>=0, $y : y);
+        // moves for current player. move ok, still no winner
+        $pm : PlayerMoveDTO($playerId : playerId, evaluationResultType==EvaluationResultType.SUCCESS, winnerPlayerId == null);
+        // for each y find x's and count moves for current player
+        accumulate( TicTacMove(playerId==$playerId, posY == $y);
+                        $count : count())
+    then
+        // code offset
+        $b.setPositionCode($y+3);
+        $b.setPlayerScore($count.intValue());
+        // iterate again
+        $b.setY($y-1);
+        update($b);
+end        
+
+rule "Player count column"
+    when  
+        $match : Match(status == Status.PLAYING);
+        // new move, no winner, iterate y values
+        $b : BoardPosition(playerScore != 3, x>=0, $x : x);
+        // moves for current player. move ok, still no winner
+        $pm : PlayerMoveDTO($playerId : playerId, evaluationResultType==EvaluationResultType.SUCCESS, winnerPlayerId == null);
+        // for each x find y's and count moves for current player
+        accumulate( TicTacMove(playerId==$playerId, posX == $x);
+                        $count : count())
+    then
+        $b.setPlayerScore($count.intValue());    
+        $b.setPositionCode($x);
+        // iterate again
+        $b.setX($x-1);
+        update($b);
+end 
+
+rule "Player count diagonal"
+no-loop
+salience -5
+    when  
+        $match : Match(status == Status.PLAYING);
+        // new move
+        $b : BoardPosition(playerScore != 3, diag==-1);
+        $pm : PlayerMoveDTO($playerId : playerId, evaluationResultType==EvaluationResultType.SUCCESS, winnerPlayerId == null);
+        // diagonal
+        $count : Number()
+            from accumulate(TicTacMove(playerId==$playerId,posX == posY) , count());
+    then
+        $b.setPlayerScore($count.intValue());
+        $b.setPositionCode(6);
+        $b.setDiag(1);
+        update($b);
+        System.out.println("$total diagonal: "+$count);
+end 
+
+rule "Player count inverse diagonal"
+no-loop
+salience -5
+    when  
+        $match : Match(status == Status.PLAYING);
+        // new move
+        $b : BoardPosition(playerScore != 3, invDiag==-1);
+        $pm : PlayerMoveDTO($playerId : playerId, evaluationResultType==EvaluationResultType.SUCCESS, winnerPlayerId == null);
+        // diagonal
+        $count : Number()
+            from accumulate(TicTacMove(playerId==$playerId, posY == Math.abs(posX-2)), count());
+    then
+        // winner
+        $b.setPlayerScore($count.intValue());
+        $b.setPositionCode(7);
+        $b.setInvDiag(1);
+        update($b);
+end   
+
+//###########################  EVALUATE(GAME END)  ##############################
+
+rule "still no winner"
+salience -10
+    when
+        $match : Match(status == Status.PLAYING);
+        // new move
+        $move : TicTacMove($moveId : moveId);
+        //  iteration ended, no winner found
+        $b : BoardPosition(x==-1, y==-1, playerScore != 3, $playerScore : playerScore);
+        $pm : PlayerMoveDTO(moveId == $moveId, $playerId : playerId, evaluationResultType==EvaluationResultType.SUCCESS, winnerPlayerId == null);
+    then
+        retract($b);
+end
+
+rule "the winner is"
+salience -10
+    when
+        $match : Match(status == Status.PLAYING);
+        // new move
+        $move : TicTacMove($moveId : moveId);
+        $b : BoardPosition( playerScore == 3  , $positionCode : positionCode, $playerScore : playerScore);
+        $pm : PlayerMoveDTO(moveId == $moveId, $playerId : playerId, evaluationResultType==EvaluationResultType.SUCCESS, winnerPlayerId == null);
+    then
+        $match.setStatus(Status.ENDED);
+        update($match);
+        retract($b);
+        $pm.setWinnerPlayerId($playerId);
+        $pm.setEvaluationContent(String.valueOf($positionCode));
+        $pm.setEvaluationResultType(EvaluationResultType.MATCH_END_WINNER);
+        update($pm);
+end
+
+rule "game over without winner"
+salience -10
+    when
+        $match : Match(status == Status.PLAYING);
+        // new move
+        $b : BoardPosition(x==-1, y==-1, playerScore != 3, $playerScore : playerScore);
+        $move : TicTacMove($moveId : moveId);
+        $pm : PlayerMoveDTO(moveId == $moveId, $playerId : playerId, evaluationResultType==EvaluationResultType.SUCCESS, winnerPlayerId == null);
+        $total : Number(this==9)
+            from accumulate(PlayerMoveDTO(), count());
+        
+    then
+        $match.setStatus(Status.ENDED);
+        update($match);
+        retract($b);
+        // draw        
+        $pm.setWinnerPlayerId(0L);
+        // BoardPosition full
+        $pm.setEvaluationContent(String.valueOf(8));
+        $pm.setEvaluationResultType(EvaluationResultType.MATCH_END_DRAW);
+        update($pm);
+end
+
+
+
+
+
+
+
