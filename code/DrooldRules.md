@@ -3,8 +3,6 @@ layout: default
 title: Drools game rules interface - Phune Gaming server-side rules
 ---
 
-# JavaGameRules.java
-
 ```
 package com.presenttechnologies.phunegaming.games.example
 
